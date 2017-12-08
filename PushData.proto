@@ -1,0 +1,35 @@
+syntax="proto3";
+
+enum Status{
+	//在线状态
+	Online = 0;
+	//离线状态
+	Offline = 1;
+}
+
+message UserInfo{
+	string name = 1;
+	uint64 id = 2;
+	Status status = 3;
+}
+
+message SendMessageInfo{
+	uint64 sender_id = 1;
+	repeated uint64 receiver_id = 2;
+	string message_data = 3;
+	bool is_board = 4;
+}
+
+message ResponseInfo{
+	uint32 code = 1;
+	string json_data = 2;
+}
+
+
+
+service PushService{
+    rpc Login(UserInfo) returns(stream ResponseInfo){}
+    rpc SendMessage(SendMessageInfo) returns(ResponseInfo){}
+}
+
+
