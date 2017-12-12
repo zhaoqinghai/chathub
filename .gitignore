@@ -2,3 +2,5 @@ PushServer/obj/Debug/netcoreapp2.0/PushServer.csproj.CoreCompileInputs.cache
 PushServer/obj/Debug/netcoreapp2.0/PushServer.AssemblyInfoInputs.cache
 PushServer/obj/Debug/netcoreapp2.0/PushServer.AssemblyInfo.cs
 PushServer/obj/Debug/netcoreapp2.0/PushServer.AssemblyInfo.cs
+/PushServer/bin
+/PushServer/obj
