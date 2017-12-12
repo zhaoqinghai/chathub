@@ -98,25 +98,22 @@ namespace GrpcProcess.Grpc
         public async Task RecieveDataLoop(AsyncServerStreamingCall<ResponseInfo> stream, Action<ResponseInfo> action)
         {
             _localCts.Value = new CancellationTokenSource(Timeout.Infinite);
-            while (await stream.ResponseStream.MoveNext(_localCts.Value.Token))
+            try
             {
-                try
+                while (await stream.ResponseStream.MoveNext(_localCts.Value.Token))
                 {
                     var response = stream.ResponseStream.Current;
                     action.Invoke(response);
-                }
-                catch(Exception ex)
-                {
-                    HandleException(ex);
-                }
-                finally
-                {
                     _localCts.Value = new CancellationTokenSource(Timeout.Infinite);
                 }
             }
+            catch (Exception ex)
+            {
+                HandleException(ex);
+            }
         }
 
-        public async Task Login(UserInfo userInfo,Action<ResponseInfo> action)
+        public async void Login(UserInfo userInfo,Action<ResponseInfo> action)
         {
             var stream = _client.Login(userInfo);
             try
@@ -130,7 +127,7 @@ namespace GrpcProcess.Grpc
         }
 
 
-        public async Task<ResponseInfo> SendMessage(SendMessageInfo messageInfo,CancellationTokenSource cts = null)
+        public async void SendMessage(SendMessageInfo messageInfo,CancellationTokenSource cts = null)
         {
             if (_client != null)
             {
@@ -141,13 +138,13 @@ namespace GrpcProcess.Grpc
                 try
                 {
                     var response = await _client.SendMessageAsync(messageInfo, deadline: DateTime.UtcNow.AddSeconds(10), cancellationToken: _localCts.Value.Token);
-                    return response;
+                    return;
                 }
                 catch(Exception ex)
                 {
                     HandleException(ex);
                 }
-                return null;
+                return;
                 
             }
             throw (new GrpcException(GrpcErrorCode.NullClient));
@@ -157,7 +154,7 @@ namespace GrpcProcess.Grpc
         {
             if(ex is RpcException)
             {
-                if(_grpcChannel.State != ChannelState.Ready)
+                if(_grpcChannel.State != ChannelState.Ready && State == ChannelState.Ready)
                 {
                     State = _grpcChannel.State;
                 }

@@ -53,27 +53,15 @@ namespace GrpcProcess
         #endregion
 
         static Grpc.GrpcClient _client;
+
+        static UserInfo _currentUser = new UserInfo();
+
+        static IList<UserInfo> _onlineUserList = new List<UserInfo>();
         static void Main(string[] args)
         {
             StartGrpcProcess();
             Config();
             DoWork();
-            //CancellationTokenSource cts = new CancellationTokenSource();
-            //var t1 = Task.Delay(Timeout.Infinite, cts.Token);
-            //var t2 = Task.Delay(Timeout.Infinite);
-
-            //Task.Delay(3000).ContinueWith(t => {
-            //    cts.Cancel(); });
-            //try
-            //{
-            //    Task.WhenAny(new Task[] { t1, t2 }).Wait();
-            //}
-            //catch
-            //{
-            //    Console.WriteLine("llllladfasdf");
-            //}
-
-            //Console.ReadLine();
         }
 
         static void Config()
@@ -88,27 +76,32 @@ namespace GrpcProcess
         static void DoWork()
         {
             var command = string.Empty;
-            var user = new UserInfo();
+            string tip = string.Empty;
+
             while (true)
             {
+                if (_currentUser.Id != 0)
+                {
+                    Console.WriteLine("用户已登录,请输入命令...");
+                }
+                command = Console.ReadLine();
                 switch (command.ToLower())
                 {
                     case "login":
-
-                        user.Status = Status.Online;
-                        Console.WriteLine("输入用户名");
-                        user.Name = Console.ReadLine();
-                        Console.WriteLine("输入id");
+                        _currentUser.Status = Status.Online;
+                        Console.WriteLine("输入用户名...");
+                        _currentUser.Name = Console.ReadLine();
+                        Console.WriteLine("输入电话号码...");
                         try
                         {
-                            user.Id = ulong.Parse(Console.ReadLine());
+                            _currentUser.Id = ulong.Parse(Console.ReadLine());
                         }
                         catch
                         {
                             Console.WriteLine("输入id为一串数字");
                             break;
                         }
-                        _client.Login(user, new Action<ResponseInfo>(obj =>
+                        _client.Login(_currentUser, new Action<ResponseInfo>(obj =>
                         {
                             if (obj is ResponseInfo)
                             {
@@ -116,28 +109,71 @@ namespace GrpcProcess
                                 {
                                     case 1:
                                         var userInfo = JsonConvert.DeserializeObject<UserInfo>(((ResponseInfo)obj).JsonData);
+                                        var list = _onlineUserList.Where(item => item.Id == userInfo.Id);
+                                        if (userInfo.Status == Status.Online)
+                                        {
+                                            if(!list.Any())
+                                                _onlineUserList.Add(userInfo);
+                                        }
+                                        else
+                                        {
+                                           
+                                            if (list.Any())
+                                            {
+                                                _onlineUserList.Remove(list.FirstOrDefault());
+                                            }
+                                        }
                                         Console.WriteLine($"{userInfo.Name}:{userInfo.Status}");
                                         break;
                                     case 2:
                                         var messageInfo = JsonConvert.DeserializeObject<SendMessageInfo>(((ResponseInfo)obj).JsonData);
-                                        Console.WriteLine($"{messageInfo.SenderId}:{messageInfo.MessageData}");
+                                        var senderUserInfo = _onlineUserList.FirstOrDefault(item => item.Id == messageInfo.SenderId);
+                                        Console.WriteLine($"{senderUserInfo.Name}:{messageInfo.MessageData}");
+                                        break;
+                                    case 3:
+                                        var userQueue = JsonConvert.DeserializeObject<Queue<UserInfo>>(((ResponseInfo)obj).JsonData);
+                                        while(userQueue.Count > 0)
+                                        {
+                                            _onlineUserList.Add(userQueue.Dequeue());
+                                        }
                                         break;
                                 }
                             }
                         }));
                         break;
-                    case "sendmessage":
-                        if(user.Id != 0)
+                    case "boardmessage":
+                        if(_currentUser.Id != 0 && _client.State == ChannelState.Ready)
                         {
-                            Console.WriteLine("请输入发送的消息.....");
-                            _client.SendMessage(new SendMessageInfo() { SenderId = user.Id, MessageData = Console.ReadLine(), IsBoard = true }).Wait();
+                            Console.WriteLine("请输入广播的消息.....");
+                            _client.SendMessage(new SendMessageInfo() { SenderId = _currentUser.Id, MessageData = Console.ReadLine(), IsBoard = true });
                         }
                         else
                         {
                             Console.WriteLine("请先登录......");
                         }
                         break;
-                    case "":
+                    case "sendmessage":
+                        if (_currentUser.Id != 0 && _client.State == ChannelState.Ready)
+                        {
+                            Console.WriteLine("请输入用户名（名字间用空格隔开）....");
+
+                            var usesString = Console.ReadLine();
+                            var userInfoArray = usesString.Split(' ');
+                            var recieverIdList = _onlineUserList.Where(item => userInfoArray.Contains(item.Name)).Select(item=> item.Id);
+                            Console.WriteLine("请输入发送的消息.....");
+                            var sendMessage = Console.ReadLine();
+                            var sendMessageInfo = new SendMessageInfo() { SenderId = _currentUser.Id, MessageData = sendMessage, IsBoard = false };
+                            foreach (var item in recieverIdList)
+                            {
+                                sendMessageInfo.ReceiverId.Add(item);
+                            }
+                            _client.SendMessage(sendMessageInfo);
+                        }
+                        else
+                        {
+                            Console.WriteLine("请先登录......");
+                        }
+                        
                         break;
                     default:
                         Console.WriteLine("无法识别该命令");
@@ -149,9 +185,13 @@ namespace GrpcProcess
                     Thread.Sleep(1000);
                     return;
                 }
-                command = Console.ReadLine();
+                
+                
             }
         }
+
+
+
         static void OnProcessExit(object sender, EventArgs e)
         {
             _client.ShutDown();
@@ -164,14 +204,21 @@ namespace GrpcProcess
             {
                 if (_client.State != ChannelState.Ready)
                 {
-                    Console.WriteLine($"{_client.State}.....");
-                    await Task.Delay(10000);
-                    if(_client.State != ChannelState.Ready)
+                    Console.WriteLine("启动连接....");
+                    try
                     {
-                        Console.WriteLine("连接失败!");
+                        await _client.StartConnectAsync();
+                    }
+                    catch
+                    {
+                        Console.WriteLine("连接异常.........");
+                        await Task.Delay(1000).ContinueWith(t => { Process.GetCurrentProcess().Kill(); });
                     }
                 }
+                _currentUser = new UserInfo();
+                _onlineUserList.Clear();
                 Console.WriteLine("连接成功!");
+                Console.WriteLine("请登录...");
             }
         }
 
@@ -186,6 +233,7 @@ namespace GrpcProcess
             catch
             {
                 Console.WriteLine("连接异常.........");
+                await Task.Delay(1000).ContinueWith(t => { Process.GetCurrentProcess().Kill(); });
             }
         }
 
