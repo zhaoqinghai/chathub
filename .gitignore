@@ -4,3 +4,5 @@ PushServer/obj/Debug/netcoreapp2.0/PushServer.AssemblyInfo.cs
 PushServer/obj/Debug/netcoreapp2.0/PushServer.AssemblyInfo.cs
 /PushServer/bin
 /PushServer/obj
+/GrpcProcess/bin
+/GrpcProcess/obj
